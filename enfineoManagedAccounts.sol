@@ -27,8 +27,6 @@ contract ENFManagedAccounts is ReentrancyGuard, AccessControl, Pausable {
     uint40 private _latestProftDistributionTimestamp;
     address private _treasuryAccount;
 
-    DepositPool[] private _depositsPool;
-
     Tier[] private _tiers;
 
     /// @dev the types of deposits
@@ -102,7 +100,7 @@ contract ENFManagedAccounts is ReentrancyGuard, AccessControl, Pausable {
             owner: msg.sender,
             profit: 0,
             amount: amount,
-            withrawState:0,
+            withdrawState:0,
             tierNumber: walletTier,
             depositType: selectedDepositType
         });
@@ -138,9 +136,9 @@ contract ENFManagedAccounts is ReentrancyGuard, AccessControl, Pausable {
     }
 
     /**
-     * @notice withdraw a deposit by its id. Some deposits can't be withdrawn prior maturity and untill cool off period passes
+     * @notice withdraw a deposit by its id. Some deposits can't be withdrawn prior maturity and until cool off period passes
      * @param depositId id of the deposit
-     * @param onlyProfit tru if you want to withdraw only the profit, false if you withdraw amount+profit
+     * @param onlyProfit true if you want to withdraw only the profit, false if you withdraw amount+profit
      * @param isIntent true if this is a withdraw intent that starts the cool off period with not actual funds transfer
     */
     function withdraw(uint256 depositId, bool onlyProfit, bool isIntent) public whenNotPaused {
@@ -150,12 +148,12 @@ contract ENFManagedAccounts is ReentrancyGuard, AccessControl, Pausable {
         if (currentDeposit.owner == address(0)) {
             revert InvalidDeposit();
         }
-        /// @dev withdraw state 1 or 2 means that an intent started, 0 means no intent. You wannot withdraw without sending previously sending an intent
-         if (!isIntent && currentDeposit.withrawState == 0) {
+        /// @dev withdraw state 1 or 2 means that an intent started, 0 means no intent. You can not withdraw without sending previously sending an intent
+         if (!isIntent && currentDeposit.withdrawState == 0) {
             revert CannotWithdrawWithoutIntent();
         }
-        /// @dev withdraw state 1 or 2 means that an intent started, 0 means no intent. You wannot send intent for a withdraw that was already marked as intent started
-         if (isIntent && currentDeposit.withrawState > 0) {
+        /// @dev withdraw state 1 or 2 means that an intent started, 0 means no intent. You can not send intent for a withdraw that was already marked as intent started
+         if (isIntent && currentDeposit.withdrawState > 0) {
             revert WithdrawAlreadyStarted();
         }
 
@@ -165,10 +163,10 @@ contract ENFManagedAccounts is ReentrancyGuard, AccessControl, Pausable {
                 currentDeposit.coolOffTimestamp = uint40(block.timestamp) + currentDeposit.depositType.coolOffPeriod;   
                 
                 if(onlyProfit){
-                    currentDeposit.withrawState = 1;
+                    currentDeposit.withdrawState = 1;
                     emit WithdrawIntent(msg.sender, currentDeposit.depositType.tokenAddress, depositId, currentDeposit.amount, currentDeposit.profit, false);
                 } else {
-                    currentDeposit.withrawState = 2;
+                    currentDeposit.withdrawState = 2;
                     emit WithdrawIntent(msg.sender, currentDeposit.depositType.tokenAddress, depositId, currentDeposit.amount, currentDeposit.profit, true);
                 }
 
@@ -186,12 +184,12 @@ contract ENFManagedAccounts is ReentrancyGuard, AccessControl, Pausable {
                             emit TransferFailedEvent(address(this), currentDeposit.owner, uint256(currentDeposit.profit), currentDeposit.depositType.tokenAddress);
                             revert DepositFundsTransferError();
                         }
-                        currentDeposit.withrawState = 0;
+                        currentDeposit.withdrawState = 0;
                         currentDeposit.profit = 0;
                         emit WithdrawOnMaturity(msg.sender, currentDeposit.depositType.tokenAddress, depositId, currentDeposit.amount, currentDeposit.profit, false);
                     }
                 } else {
-                    if(currentDeposit.withrawState == 2){
+                    if(currentDeposit.withdrawState == 2){
                         removeDepositOwner(msg.sender);
                         
                         uint256 amountToTransfer  = addProfitToAmount(currentDeposit.amount , currentDeposit.profit);
@@ -235,10 +233,10 @@ contract ENFManagedAccounts is ReentrancyGuard, AccessControl, Pausable {
         for (i; i < owners.length; ++i) {
             Deposit storage currentDeposit = _depositsByOwner[owners[i]][depositIds[i]];
             ///@dev if a withdraw intent was executed on this deposit, for entire amount, we can no longer distribute profits to it.
-            if(currentDeposit.withrawState < 2){
+            if(currentDeposit.withdrawState < 2){
                 currentDeposit.profit += profits[i];
                 /// @dev beside profit, we also reset the deposit state and lastProfitCalculationTimestamp
-                currentDeposit.withrawState = 0;
+                currentDeposit.withdrawState = 0;
                 currentDeposit.lastProfitCalculationTimestamp = uint40(block.timestamp);
             }
         }
@@ -379,7 +377,7 @@ contract ENFManagedAccounts is ReentrancyGuard, AccessControl, Pausable {
      * @param coolOffPeriod cool off period of the deposit type
      * @param minimumAmountToDeposit minimum amount allowed for this deposit type
      * @param name the name of the deposit
-     * @param tokenAddress the address fo the token used for the deposit
+     * @param tokenAddress the address for the token used for the deposit
      */
     function updateDepositsType(
         uint256 index,
