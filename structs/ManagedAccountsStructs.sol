@@ -10,7 +10,7 @@ struct Deposit {
     uint256 amount;
     int256 profit;
     uint40 id;
-    uint40 withrawState; // 1 means intent for only profit. 2 means intent for all amount
+    uint40 withdrawState; // 1 means intent for only profit. 2 means intent for all amount
     uint16 tierNumber;
     DepositType depositType;
 }
